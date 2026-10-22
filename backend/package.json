@@ -1,0 +1,47 @@
+{
+  "name": "src",
+  "version": "1.0.0",
+  "description": "Debate App backend",
+  "main": "app.mjs",
+  "scripts": {
+    "test": "vitest run",
+    "test:ci": "vitest run --exclude tests/aiDebate.test.mjs",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src tests",
+    "dev": "nodemon src/app.mjs",
+    "prod": "node src/app.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UTSC-CSCC01-Software-Engineering-I/term-group-project-c01w26-debate-arena.git"
+  },
+  "author": "Nabil Aldihni Garcia, Jean Luc Imanishimwe, Zhiyan Liu, Tony Park",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/UTSC-CSCC01-Software-Engineering-I/term-group-project-c01w26-debate-arena/issues"
+  },
+  "homepage": "https://github.com/UTSC-CSCC01-Software-Engineering-I/term-group-project-c01w26-debate-arena#readme",
+  "dependencies": {
+    "@google/generative-ai": "^0.3.0",
+    "bcrypt": "^6.0.0",
+    "connect-mongo": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "express-validator": "^7.3.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongodb": "^7.1.0",
+    "mongoose": "^9.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "globals": "^15.15.0",
+    "nodemon": "^3.1.11",
+    "supertest": "^7.2.2",
+    "vitest": "^4.0.18"
+  }
+}

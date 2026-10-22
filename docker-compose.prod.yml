@@ -1,0 +1,6 @@
+services:
+  frontend:
+    image: your-dockerhub-user/debate-court-frontend:latest
+
+  backend:
+    image: your-dockerhub-user/debate-court-backend:latest

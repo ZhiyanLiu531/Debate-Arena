@@ -1,0 +1,82 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Canary Deploy & Promote
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Deploy canary, analyse, and promote
+        uses: appleboy/ssh-action@v1
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
+          command_timeout: 10m
+          script: |
+            set -euo pipefail
+
+            COMPOSE_DIR=/home/ubuntu/debate-court
+            BACKEND_IMAGE=your-dockerhub-user/debate-court-backend:latest
+            FRONTEND_IMAGE=your-dockerhub-user/debate-court-frontend:latest
+            INTERNAL_NET=debate-court_internal
+
+            cleanup_canary() {
+              docker rm -f backend-canary frontend-canary 2>/dev/null || true
+            }
+
+            echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+            cleanup_canary
+
+            echo "Updating repo..."
+            cd $COMPOSE_DIR && git pull
+
+            echo "Pulling images..."
+            docker pull $BACKEND_IMAGE -q
+            docker pull $FRONTEND_IMAGE -q
+
+            echo "Starting canary..."
+            docker run -d --name backend-canary --network $INTERNAL_NET \
+              --env-file $COMPOSE_DIR/backend/.env -p 127.0.0.1:3001:3000 $BACKEND_IMAGE
+            docker run -d --name frontend-canary --network $INTERNAL_NET -p 127.0.0.1:8081:80 $FRONTEND_IMAGE
+            sleep 15
+
+            echo "Analysing canary..."
+            CANARY_OK=true
+
+            [ "$(docker inspect -f '{{.State.Running}}' backend-canary 2>/dev/null)" = "true" ]  || { echo "FAIL: backend-canary not running";  CANARY_OK=false; }
+            [ "$(docker inspect -f '{{.State.Running}}' frontend-canary 2>/dev/null)" = "true" ] || { echo "FAIL: frontend-canary not running"; CANARY_OK=false; }
+            curl -sf --max-time 5 http://127.0.0.1:3001/api/health > /dev/null             || { echo "FAIL: health check";                  CANARY_OK=false; }
+            curl -sf --max-time 5 http://127.0.0.1:8081/ > /dev/null                       || { echo "FAIL: frontend not responding";        CANARY_OK=false; }
+            ! docker logs backend-canary 2>&1 | grep -qE "uncaughtException|UnhandledPromiseRejection|FATAL" || { echo "FAIL: fatal errors in logs"; CANARY_OK=false; }
+            SMOKE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:3001/api/topics || echo "000")
+            [ "$SMOKE" != "000" ] && [ "${SMOKE:0:1}" != "5" ]                             || { echo "FAIL: /api/topics returned $SMOKE";    CANARY_OK=false; }
+
+            if [ "$CANARY_OK" = "false" ]; then
+              echo "Canary failed — production untouched."
+              echo "--- backend-canary logs ---"
+              docker logs backend-canary 2>&1 | tail -20 || true
+              echo "--- frontend-canary logs ---"
+              docker logs frontend-canary 2>&1 | tail -20 || true
+              cleanup_canary
+              exit 1
+            fi
+
+            echo "Canary passed — promoting to production..."
+            cleanup_canary
+            cd $COMPOSE_DIR
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull frontend backend -q
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --force-recreate frontend backend
+            echo "Done."

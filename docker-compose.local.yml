@@ -1,0 +1,16 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: debate
+      MONGO_INITDB_ROOT_PASSWORD: debate
+      MONGO_INITDB_DATABASE: debate_court
+    volumes:
+      - mongodata:/data/db
+
+volumes:
+  mongodata:
